@@ -1,0 +1,60 @@
+class ExcludeMatcher {
+private:
+    struct TrieNode {
+        std::unordered_map<QChar, std::unique_ptr<TrieNode>> children;
+        bool isEnd = false;
+    };
+    
+    TrieNode absoluteRoot;  // Для абсолютных путей
+    TrieNode relativeRoot;  // Для относительных путей
+    
+public:
+    void addExcludeRule(const QString& path, bool isAbsolute) {
+        TrieNode* current = isAbsolute ? &absoluteRoot : &relativeRoot;
+        
+        for (const QChar& ch : path) {
+            if (current->children.find(ch) == current->children.end()) {
+                current->children[ch] = std::make_unique<TrieNode>();
+            }
+            current = current->children[ch].get();
+        }
+        
+        current->isEnd = true;
+    }
+    
+    // Быстрая проверка - O(k) где k - длина пути
+    bool matches(const QString& path) const {
+        // Сначала проверяем абсолютные правила
+        if (checkTrie(path, absoluteRoot)) {
+            return true;
+        }
+        
+        // Затем относительные (проверяем все подстроки)
+        for (int i = 0; i < path.length(); ++i) {
+            if (checkTrie(path.mid(i), relativeRoot)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+private:
+    bool checkTrie(const QString& path, const TrieNode& root) const {
+        const TrieNode* current = &root;
+        
+        for (const QChar& ch : path) {
+            auto it = current->children.find(ch);
+            if (it == current->children.end()) {
+                return false;
+            }
+            current = it->second.get();
+            
+            if (current->isEnd) {
+                return true;
+            }
+        }
+        
+        return current->isEnd;
+    }
+};
