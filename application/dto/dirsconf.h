@@ -115,6 +115,21 @@ struct DirsConfig {
         exclude.erase(std::remove(exclude.begin(), exclude.end(), dir), exclude.end());
     }
 
+    QString toString() {
+        QString res = "Корневые папки:";
+        for ( QString const & dir : roots )
+            res+= " " + dir + " ;";
+        bool first = true ;
+        for ( QString const & dir : exclude ) {
+            if ( first ) {
+                first = false;
+                res += "  Искл.:";
+            }
+            res+= " " + dir + " ;";
+        }
+        return res ;
+    }
+
     struct ValidationResult {
         bool isValid = false;
         std::vector<QString> errors;

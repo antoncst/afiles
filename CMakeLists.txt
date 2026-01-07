@@ -46,6 +46,9 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         presentation/dialogs/dirsdialog.h
         presentation/dialogs/dirsdialog.cpp
         application/dto/scanprogress.h
+        domain/utils/historynavigator.hpp
+
+
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET afiles03 APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

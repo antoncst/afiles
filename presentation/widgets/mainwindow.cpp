@@ -12,6 +12,9 @@
 #include <QSettings>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QStyle>
+#include <QApplication>
+#include <QCompleter>
 
 //#include <thread>
 #include <chrono>
@@ -49,7 +52,6 @@ MainWindow::MainWindow(
     readSettings();
 
     scanFileSystem(); ;
-
 
 }
 
@@ -153,6 +155,13 @@ void MainWindow::setupUI() {
     trayIcon = new QSystemTrayIcon ;
     trayIcon->setVisible( true ) ;
 
+    label_root_dirs_title = new QLabel( tr("Корневые папки: ") ) ;
+    label_root_dirs = new QLabel() ;
+    button_conf_dirs = new QPushButton ;
+    QIcon folderIcon = QApplication::style()->standardIcon(QStyle::SP_DirIcon);
+    button_conf_dirs->setIcon(folderIcon) ;
+    button_conf_dirs->setMaximumWidth(25) ;
+
     label_query = new QLabel( tr("&Запрос:") ) ;
     lineedit_query = new QLineEdit() ;
     label_query->setBuddy( lineedit_query ) ;
@@ -176,20 +185,26 @@ void MainWindow::setupUI() {
     button_hist_right->setMaximumWidth( 20 ) ;
     button_hist_right->setFocusPolicy( Qt::NoFocus ) ;
 
-    hbox = new QHBoxLayout() ;
-    hbox->addWidget( label_query ) ;
-    hbox->addWidget( lineedit_query ) ;
-    hbox->addWidget( label_hiddenFiles ) ;
-    hbox->addWidget( chkbx_hiddenFiles ) ;
-    hbox->addWidget( button_stop ) ;
-    hbox->addWidget( button_hist_left ) ;
-    hbox->addWidget( button_hist_right ) ;
+    hbox1 = new QHBoxLayout() ;
+    //hbox1->addWidget( label_root_dirs_title );
+    hbox1->addWidget( label_root_dirs );
+    hbox1->addWidget( button_conf_dirs);
+
+    hbox2 = new QHBoxLayout() ;
+    hbox2->addWidget( label_query ) ;
+    hbox2->addWidget( lineedit_query ) ;
+    hbox2->addWidget( label_hiddenFiles ) ;
+    hbox2->addWidget( chkbx_hiddenFiles ) ;
+    hbox2->addWidget( button_stop ) ;
+    hbox2->addWidget( button_hist_left ) ;
+    hbox2->addWidget( button_hist_right ) ;
 
     statusBar = new QStatusBar() ;
     searchResultsModel = new QStringListModel(this);
     searchResultsView = new QListView() ;
 
-    mainLayout->addLayout( hbox ) ;
+    mainLayout->addLayout( hbox1 ) ;
+    mainLayout->addLayout( hbox2 ) ;
     mainLayout->addWidget( searchResultsView ) ;
     mainLayout->addWidget( statusBar ) ;
 
@@ -200,7 +215,7 @@ void MainWindow::setupMenuBar() {
     setMenuBar(menuBar);
 
     fileMenu = menuBar->addMenu("File");
-    fileMenu->addAction(tr("Корневые папки..."), this, &MainWindow::onManageDirectoriesClicked );
+    m_manageDirectoriesAction = fileMenu->addAction(tr("Корневые папки..."), this, &MainWindow::onManageDirectoriesClicked );
     //fileMenu->addAction("Scan File System", this, &MainWindow::onScanClicked);
     fileMenu->addSeparator();
     fileMenu->addAction(tr("Выход"), this, &QWidget::close);
@@ -255,15 +270,16 @@ void MainWindow::setupConnections() {
     connect( lineedit_query  , &QLineEdit::editingFinished  ,
             this, &MainWindow::on_query_editfinished ) ;
     connect( button_stop , &QPushButton::clicked  , this , &MainWindow::stop_scan_files ) ;
+    connect( button_conf_dirs , &QPushButton::clicked  , this , &MainWindow::onManageDirectoriesClicked ) ;
     connect(fileService.get(), &application::services::FileManagerService::scanProgressUpdated,
             this, &MainWindow::onScanProgressUpdated);
 
     // connect ( chkbx_hiddenFiles , &QCheckBox::stateChanged ,// (int state)
     //         this , &MainWindow::on_hidden_files_checked ) ;
-    // connect( button_hist_left , &QPushButton::clicked  ,
-    //         this , &MainWindow::on_history_go_back ) ;
-    // connect( button_hist_right , &QPushButton::clicked  ,
-    //         this , &MainWindow::on_history_go_forward ) ;
+    connect( button_hist_left , &QPushButton::clicked  ,
+            this , &MainWindow::on_history_go_back ) ;
+    connect( button_hist_right , &QPushButton::clicked  ,
+            this , &MainWindow::on_history_go_forward ) ;
 
     /*connect(progressDialog, &QProgressDialog::canceled, this, [this]() {
         if (workerThread && workerThread->isRunning()) {
@@ -396,6 +412,8 @@ void MainWindow::onManageDirectoriesClicked() {
         scanFileSystem();
 
         // Обновляем UI
+        label_root_dirs->setText( newConfig.toString() ) ;
+
         //updateDirectoriesConfig();
 
         // Показываем статистику
@@ -403,6 +421,7 @@ void MainWindow::onManageDirectoriesClicked() {
                               .arg(newConfig.roots.size())
                               .arg(newConfig.exclude.size());
         showInfo(message);
+
     }
 }
 
@@ -417,10 +436,17 @@ void MainWindow::onScanProgressUpdated(int current, const QString& currentItem) 
 }
 
 
+void MainWindow::SetUIEnablesOnScan(bool enabled )
+{
+    button_stop->setVisible( !enabled ) ;
+    lineedit_query->setEnabled(enabled );
+    m_manageDirectoriesAction->setEnabled(enabled);
+    button_conf_dirs->setEnabled( enabled ) ;
+}
+
 
 void MainWindow::scanFileSystem() {
-
-    button_stop->setVisible( true ) ;
+    SetUIEnablesOnScan( false );
     // Получаем список корневых директорий
     //   QStringList roots = rootsListModel->stringList();
     const ::application::dto::DirsConfig dirs_conf = fileService->getDirectoriesConfig() ;
@@ -471,7 +497,8 @@ void MainWindow::scanFileSystem() {
 void MainWindow::onScanFinished() {
     qDebug() << "onScanFinished" ;
 
-    button_stop->setVisible( false ) ;
+    //button_stop->setVisible( false ) ;
+    SetUIEnablesOnScan( true );
 
     const auto& fileSystem = fileService->getFileSystem();
     fileService->resetStopState() ;
@@ -501,6 +528,8 @@ void MainWindow::onScanFinished() {
 
     // Очищаем ресурсы
     cleanupThread();
+
+    onSearchClicked() ;
 }
 
 void MainWindow::onScanError(const QString& error) {
@@ -580,6 +609,36 @@ void MainWindow::readSettings()
     }
 #endif
     fileService->setDirectoriesConfig( dirs_conf ) ;
+
+    label_root_dirs->setText( dirs_conf.toString() ) ;
+
+    int cur_item = 1 ;
+    if ( settings.contains( "history_cur_item" ) )
+        cur_item = settings.value( "history_cur_item" ).toInt() ;
+
+    if ( settings.contains( "history_list" ) )
+    {
+        QStringList content = settings.value( "history_list" ).toStringList() ;
+        if ( content.size() > 0 ) {
+            query_history.set_content( std::vector( content.begin() , content.end() ) ) ;
+            query_history.set_current_index( cur_item ) ;
+            lineedit_query->setText( query_history.get_current() ) ;
+            emit lineedit_query->textEdited( lineedit_query->text() ) ;
+        }
+    }
+
+    if ( settings.contains( "query_stringlist" ) )
+    {
+        * query_stringlist = settings.value( "query_stringlist" ).toStringList() ;
+        query_completer = new QCompleter( * query_stringlist , this) ;
+        query_completer->setCaseSensitivity( Qt::CaseInsensitive ) ;
+        query_completer->setCompletionMode( QCompleter::InlineCompletion ) ;
+        lineedit_query->setCompleter( query_completer ) ;
+        if ( query_stringlist->size() > 0 )
+            lineedit_query->setText( query_stringlist->at( 0 ) ) ;
+    }
+
+
 }
 
 void MainWindow::writeSettings()
@@ -600,11 +659,55 @@ void MainWindow::writeSettings()
         qslist.append( s );
     settings.setValue( "excludeDirs" , qslist ) ;
 
+    std::vector< QString > history_vector = query_history.get_content() ;
+    if ( history_vector.size() > 0 ) {
+        //int diff = history_vector.size() - max_query_history_count ;
+        //if ( diff < 0 ) diff = 0 ;
+        QStringList history_list( history_vector.begin() /* + diff */, history_vector.end() ) ;
+        settings.setValue( "history_list" , history_list ) ;
+
+        int cur_item = query_history.get_current_index() ;
+        //cur_item -= diff ;
+        //if (cur_item < 1 ) cur_item = 1 ;
+        settings.setValue( "history_cur_item" , cur_item ) ;
+    }
+
+    if ( query_stringlist->size() > 0 )
+        settings.setValue( "query_stringlist" , * query_stringlist ) ;
+
     needToSaveSettings = false ;
+}
+
+void MainWindow::add_query_into_complete_list()
+{
+    query_stringlist->removeAll( lineedit_query->text() ) ;
+
+    query_stringlist->push_front( lineedit_query->text() ) ;
+    while ( query_stringlist->count() > max_query_compelete_count )
+        query_stringlist->removeLast() ;
+
+
+    if ( query_completer )
+    {
+        delete query_completer ;
+    }
+    query_completer = new QCompleter( * query_stringlist , this ) ;
+    query_completer->setCaseSensitivity( Qt::CaseInsensitive ) ;
+    query_completer->setCompletionMode( QCompleter::InlineCompletion ) ;
+    lineedit_query->setCompleter( query_completer ) ;
+    writeSettings() ;
 }
 
 void MainWindow::on_query_editfinished()
 {
+    if ( lineedit_query->text().size() >= 2 )
+    {
+        query_history.add( lineedit_query->text() ) ;
+        set_history_bttns_visibility() ;
+        add_query_into_complete_list() ;
+        needToSaveSettings = true ;
+    }
+
     // emit lineedit_query->textEdited( lineedit_query->text() ) ;
     // if ( lineedit_query->text().size() >= 2 )
     // {
@@ -739,6 +842,8 @@ void MainWindow::updateSearchResultsView() {
 
     for (int index : resultIndices) {
         QString fullPath = fileService->getNodeFullPath(index);
+        if ( fileService->getFileSystem()[index].isDirectory() )
+            fullPath += QDir::separator() ;
         results.append( fullPath );
     }
 
@@ -799,5 +904,30 @@ bool MainWindow::eventFilter(QObject *target, QEvent *event)
     }*/
     return QWidget::eventFilter( target, event ) ;
 }
+
+void MainWindow::on_history_go_back()
+{
+    lineedit_query->setText( query_history.get_back() ) ;
+    emit lineedit_query->textEdited( lineedit_query->text() ) ;
+    needToSaveSettings = true ;
+    set_history_bttns_visibility() ;
+
+}
+
+void MainWindow::on_history_go_forward()
+{
+    lineedit_query->setText( query_history.get_forward() ) ;
+    emit lineedit_query->textEdited( lineedit_query->text() ) ;
+    needToSaveSettings = true ;
+    set_history_bttns_visibility() ;
+}
+
+void MainWindow::set_history_bttns_visibility()
+{
+    button_hist_left->setEnabled( query_history.has_back() ) ;
+    button_hist_right->setEnabled( query_history.has_forward() ) ;
+}
+
+
 
 } //namespace presentation::widgets

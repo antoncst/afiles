@@ -21,7 +21,7 @@
 #include "../../application/services/filemanagerservice.h"
 #include "../../infrastructure/logging/logger.h"
 #include "../../presentation/workers/filescanworker.h"
-
+#include "../../domain/utils/historynavigator.hpp"
 
 namespace presentation::widgets {
 
@@ -47,16 +47,16 @@ private slots:
     void on_query_editfinished() ;
     //void on_dirsedit_finished() ; // lineedit_dirs ->editingFinished
     // void on_hidden_files_checked() ; // chkbx_hiddenFiles ->stateChanged
-    // void on_history_go_back() ; // button_hist_left ->clicked , action alt-left
-    // void on_history_go_forward() ; // button_hist_right ->clicked
+    void on_history_go_back() ; // button_hist_left ->clicked , action alt-left
+    void on_history_go_forward() ; // button_hist_right ->clicked
     // void slot_run_action() ; // run_action ->triggered
     // void slot_edit_action() ; // edit_action ->triggered
     // void slot_openfolder_action() ;
     // void item_activated( const QModelIndex & ) ; // searchResultsView ->activated
     // void item_doubleClicked(const QModelIndex & ) ;
-    // void add_query_into_complete_list() ;
+    void add_query_into_complete_list() ;
     //void start_build_tree() ;
-    // void set_history_bttns_visibility() ;
+    void set_history_bttns_visibility() ;
 
     //void on_tree_built() ;
 
@@ -88,6 +88,7 @@ private:
     std::shared_ptr<application::services::FileManagerService> fileService { nullptr } ;
 
     void setupUI();
+    void SetUIEnablesOnScan(bool enabled) ;
     void setupMenuBar();
     //void setupToolBar();
     void setupConnections();
@@ -133,6 +134,9 @@ private:
 
 
     QVBoxLayout* mainLayout ;
+    QLabel * label_root_dirs_title ;
+    QLabel * label_root_dirs ;
+    QPushButton* button_conf_dirs ;
     QLabel * label_query ;
     QLineEdit * lineedit_query ;
     QLabel * label_hiddenFiles ;
@@ -141,7 +145,8 @@ private:
     QPushButton * button_hist_left ;
     QPushButton * button_hist_right ;
 
-    QHBoxLayout * hbox ;
+    QHBoxLayout * hbox1 ;
+    QHBoxLayout * hbox2 ;
     QVBoxLayout * vbox ;
 
     QStatusBar * statusBar ;
@@ -155,7 +160,10 @@ private:
     QSystemTrayIcon * trayIcon;
     QMenu * trayIconMenu;
 
+    QAction * m_manageDirectoriesAction ;
     QMutex * pmutex ;
+
+    historyNavigator< QString > query_history ;
 
     // Qt Threading
     QThread* workerThread = nullptr ;

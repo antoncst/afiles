@@ -135,17 +135,58 @@ void FilesProc::scanDirectoryRecursive(
     //for (auto& child : children) {
     //}
 }
-
+//C:/Programs; C:/Program Files; c:\windows; AppData; c:\qt;
 bool FilesProc::ScanContext::shouldExclude(const QString& path) const {
+    QString normalizedPath = path.toLower();
+
     for (const auto& exclude : dirs_config.exclude) {
-        if (path.contains(exclude, Qt::CaseInsensitive)) {
-            //umap_undiscovered_skip_dirs_[ skip_dir ] = true ;
+        //проверка на абсолютный путь
+#ifdef Q_OS_WIN
+        if ( exclude.length() >= 2 && ( exclude[1] == ':' ) ) // i.e. c:\path
+            if ( normalizedPath.startsWith(exclude) )
+                return true ;
+            else
+                continue ;
+        if ( exclude.length() >= 1 && ( exclude[0] == ':' ) ) // i.e. :\path
+            if ( QStringView(normalizedPath).sliced(1).startsWith(exclude) )
+                return true ;
+            else
+                continue ;
+#elif
+        if ( exclude[0] = '/' )
+            if ( normalizedPath.startsWith(exclude) )
+                return true;
+            else
+                continue ;
+#endif
+        //относительный путь
+        // Проверяем только после каждого слэша
+        int pos = 0;
+            while ((pos = normalizedPath.indexOf(QDir::separator(), pos + 1)) != -1) {
+            if (QStringView(normalizedPath).sliced(pos + 1).startsWith(exclude)) {
+                return true;
+            }
+        }
+        // И проверяем с начала строки
+        if (normalizedPath.startsWith(exclude)) {
             return true;
         }
     }
     return false;
 }
 
+
+/*
+bool FilesProc::ScanContext::shouldExclude(const QString& path) const {
+    for (const auto& exclude : dirs_config.exclude) {
+        if (path.toLower().contains(exclude) ) {   // , Qt::CaseInsensitive
+            //umap_undiscovered_skip_dirs_[ skip_dir ] = true ;
+            return true;
+        }
+    }
+    return false;
+}
+*/
 
 QString normalize_str( QString const & str )
 {
