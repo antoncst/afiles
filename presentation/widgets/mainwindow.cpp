@@ -15,6 +15,9 @@
 #include <QStyle>
 #include <QApplication>
 #include <QCompleter>
+#include <QCloseEvent>
+#include <QSignalBlocker>
+//#include <QAbstractEventDispatcher>
 
 //#include <thread>
 #include <chrono>
@@ -67,18 +70,23 @@ bool MainWindow::ckeckupIsThreadClean() {
 }
 
 void MainWindow::cleanupThread() {
-    if (workerThread) {
-        qDebug() << "cleaning up thread" ;
-        if (workerThread->isRunning()) {
-            fileService->stopScanFiles() ;
-            workerThread->wait(200); // Ждем 0.3 секунды для graceful shutdown
+    if (!workerThread)
+        return ;
+    qDebug() << "cleaning up thread" ;
+    if (workerThread->isRunning()) {
+
+        fileService->stopScanFiles() ;
+        workerThread->wait(200) ; // Ждем 0.2 секунды для graceful shutdown
+        //workerThread->requestInterruption();
+        workerThread->wait(100);
+        for ( int i=0 ; i < 80 && workerThread->isRunning() ; ++i) { // на вский случай, лучше грохнуться, чем бесконечно ждать
             workerThread->quit();
             QThread::msleep(50) ;
-            fileService->resetStopState() ;
         }
-        delete workerThread;
-        workerThread = nullptr;
+        fileService->resetStopState() ;
     }
+    delete workerThread;
+    workerThread = nullptr;
 
     // Worker удалится автоматически при удалении thread
     file_scan_worker = nullptr;
@@ -274,8 +282,8 @@ void MainWindow::setupConnections() {
     connect(fileService.get(), &application::services::FileManagerService::scanProgressUpdated,
             this, &MainWindow::onScanProgressUpdated);
 
-    // connect ( chkbx_hiddenFiles , &QCheckBox::stateChanged ,// (int state)
-    //         this , &MainWindow::on_hidden_files_checked ) ;
+    connect ( chkbx_hiddenFiles , &QCheckBox::stateChanged ,// (int state)
+             this , &MainWindow::on_hidden_files_checked ) ;
     connect( button_hist_left , &QPushButton::clicked  ,
             this , &MainWindow::on_history_go_back ) ;
     connect( button_hist_right , &QPushButton::clicked  ,
@@ -338,63 +346,6 @@ void MainWindow::setupConnections() {
 
 }
 
-/* void MainWindow::onManageDirsClicked() {
-
-
-
-    QString dir = QFileDialog::getExistingDirectory(
-        this,
-        "Select Root Directory",
-        QDir::homePath(),
-        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
-        );
-
-    if (!dir.isEmpty()) {
-        QStringList currentRoots = rootsListModel->stringList();
-        if (!currentRoots.contains(dir)) {
-            currentRoots.append(dir);
-            rootsListModel->setStringList(currentRoots);
-            statusBar->showMessage(QString("Added root directory: %1").arg(dir), 3000);
-        } else {
-            statusBar->showMessage("Directory already in roots list", 3000);
-        }
-    }
-}*/
-/*
-void MainWindow::onRemoveRootClicked() {
-    QModelIndexList selected = rootsListView->selectionModel()->selectedIndexes();
-    if (selected.isEmpty()) {
-        QMessageBox::information(this, "No Selection", "Please select a root directory to remove.");
-        return;
-    }
-
-    QStringList currentRoots = rootsListModel->stringList();
-    for (const QModelIndex& index : selected) {
-        if (index.isValid()) {
-            QString dir = currentRoots.at(index.row());
-            currentRoots.removeAt(index.row());
-            statusBar->showMessage(QString("Removed root directory: %1").arg(dir), 3000);
-        }
-    }
-    rootsListModel->setStringList(currentRoots);
-}
-*/
-/*
-void MainWindow::updateDirectoriesConfig() {
-    auto config = fileService->getDirectoriesConfig();
-
-    // Обновляем список в UI если нужно
-    QStringList rootsList;
-    for (const auto& root : config.roots) {
-        rootsList.append(QString::fromStdString(root));
-    }
-
-    // Можно показать краткую информацию в status bar
-    statusBar->showMessage(
-        QString("Roots: %1, Excluded: %2").arg(config.roots.size()).arg(config.exclude.size()),
-        3000);
-}
-*/
 void MainWindow::onManageDirectoriesClicked() {
     // Получаем текущую конфигурацию
     auto currentConfig = fileService->getDirectoriesConfig();
@@ -442,6 +393,20 @@ void MainWindow::SetUIEnablesOnScan(bool enabled )
     lineedit_query->setEnabled(enabled );
     m_manageDirectoriesAction->setEnabled(enabled);
     button_conf_dirs->setEnabled( enabled ) ;
+    chkbx_hiddenFiles->setEnabled( enabled );
+    if ( enabled )
+        set_history_bttns_visibility();
+    else {
+        button_hist_left->setEnabled( false ) ;
+        button_hist_right->setEnabled( false ) ;
+    }
+}
+
+
+void MainWindow::on_hidden_files_checked() {
+    fileService->setShowHidden( chkbx_hiddenFiles->checkState() ) ;
+    writeSettings();
+    scanFileSystem();
 }
 
 
@@ -499,6 +464,7 @@ void MainWindow::onScanFinished() {
 
     //button_stop->setVisible( false ) ;
     SetUIEnablesOnScan( true );
+    set_history_bttns_visibility();
 
     const auto& fileSystem = fileService->getFileSystem();
     fileService->resetStopState() ;
@@ -529,7 +495,7 @@ void MainWindow::onScanFinished() {
     // Очищаем ресурсы
     cleanupThread();
 
-    onSearchClicked() ;
+    onSearchClicked( message + " | ") ;
 }
 
 void MainWindow::onScanError(const QString& error) {
@@ -623,7 +589,7 @@ void MainWindow::readSettings()
             query_history.set_content( std::vector( content.begin() , content.end() ) ) ;
             query_history.set_current_index( cur_item ) ;
             lineedit_query->setText( query_history.get_current() ) ;
-            emit lineedit_query->textEdited( lineedit_query->text() ) ;
+            //emit lineedit_query->textEdited( lineedit_query->text() ) ;
         }
     }
 
@@ -634,11 +600,23 @@ void MainWindow::readSettings()
         query_completer->setCaseSensitivity( Qt::CaseInsensitive ) ;
         query_completer->setCompletionMode( QCompleter::InlineCompletion ) ;
         lineedit_query->setCompleter( query_completer ) ;
-        if ( query_stringlist->size() > 0 )
-            lineedit_query->setText( query_stringlist->at( 0 ) ) ;
+        //if ( query_stringlist->size() > 0 )
+        //    lineedit_query->setText( query_stringlist->at( 0 ) ) ;
     }
+    if ( settings.contains( "hiddenFiles" ) ) {
+        QSignalBlocker blocker(chkbx_hiddenFiles);  // Конструктор блокирует сигнал
+        // Деструктор автоматически разблокирует при выходе из области видимости
+        chkbx_hiddenFiles->setCheckState( Qt::CheckState(settings.value("hiddenFiles").toUInt() ) ) ;
+    }
+    fileService->setShowHidden( chkbx_hiddenFiles->checkState() ) ;
 
 
+}
+
+void MainWindow::closeEvent(QCloseEvent *event) {
+    cleanupThread() ;
+    writeSettings() ;
+    event->accept();  // Разрешить закрытие
 }
 
 void MainWindow::writeSettings()
@@ -658,6 +636,8 @@ void MainWindow::writeSettings()
     for (const auto &s : dirs_conf.exclude)
         qslist.append( s );
     settings.setValue( "excludeDirs" , qslist ) ;
+
+    settings.setValue( "hiddenFiles" , chkbx_hiddenFiles->checkState() ) ;
 
     std::vector< QString > history_vector = query_history.get_content() ;
     if ( history_vector.size() > 0 ) {
@@ -756,22 +736,22 @@ void MainWindow::on_query_edit( const QString & text ) {
 */
 }
 
-void MainWindow::onSearchClicked() {
+void MainWindow::onSearchClicked( const QString & statusBarMessage ) {
     QString searchTerm = lineedit_query->text().trimmed();
     if (searchTerm.size() < 3 )
         return;
 
-    try {
+    //try {
         fileService->searchFiles(searchTerm.toStdString());
         updateSearchResultsView();
         updateSearchHistoryCombo();
 
         const auto& results = fileService->getSearchResultIndices();
-        showInfo(QString("Found %1 results").arg(results.size()));
+        showInfo( statusBarMessage + QString("Результатов: %1 ").arg(results.size()));
 
-    } catch (const std::exception& e) {
-        showError(QString("Search failed: %1").arg(e.what()));
-    }
+    // } catch (const std::exception& e) {
+    //     showError(QString("Search failed: %1").arg(e.what()));
+    // }
 }
 /*
 void MainWindow::onSearchTextChanged(const QString& text) {
@@ -909,7 +889,7 @@ void MainWindow::on_history_go_back()
 {
     lineedit_query->setText( query_history.get_back() ) ;
     emit lineedit_query->textEdited( lineedit_query->text() ) ;
-    needToSaveSettings = true ;
+    writeSettings(); ;
     set_history_bttns_visibility() ;
 
 }
@@ -918,7 +898,7 @@ void MainWindow::on_history_go_forward()
 {
     lineedit_query->setText( query_history.get_forward() ) ;
     emit lineedit_query->textEdited( lineedit_query->text() ) ;
-    needToSaveSettings = true ;
+    writeSettings();
     set_history_bttns_visibility() ;
 }
 

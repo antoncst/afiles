@@ -22,11 +22,11 @@ void FileManagerService::onScannerProgress(int current, const QString& currentIt
 
 
 void FileManagerService::setDirectoriesConfig(const application::dto::DirsConfig& config) {
-    m_dir_paths = config;
+    m_dirs_config = config;
 }
 
 const application::dto::DirsConfig FileManagerService::getDirectoriesConfig() const {
-    return m_dir_paths;
+    return m_dirs_config;
 }
 
 
@@ -64,10 +64,10 @@ const application::dto::DirsConfig FileManagerService::getDirectoriesConfig() co
 }
 
 void FileManagerService::scanFileSystem() {
-    if (m_dir_paths.roots.empty()) return;
+    if (m_dirs_config.roots.empty()) return;
 
     // Нормализуем конфигурацию для сканирования
-    ::application::dto::DirsConfig scan_config = normalizeDirsForScanning(m_dir_paths);
+    ::application::dto::DirsConfig scan_config = normalizeDirsForScanning(m_dirs_config);
 
     // FileWorker возвращает данные, мы их сохраняем
     fileSystem = filesProc->scanFileSystem(scan_config);

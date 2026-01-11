@@ -44,6 +44,9 @@ public:
     // Методы для работы с конфигурацией директорий
     void setDirectoriesConfig(const application::dto::DirsConfig& config);
     const application::dto::DirsConfig getDirectoriesConfig() const;
+    void setShowHidden( bool show_hidden ) {
+        m_dirs_config.show_hidden = show_hidden ;
+    }
 
     // Helper methods
     QString getNodeFullPath(int index) const;
@@ -60,7 +63,7 @@ private:
     std::vector<domain::entities::FileNode> fileSystem; // Здесь храним дерево (в памяти)
     std::vector<int> searchResultIndices;
     std::vector<std::string> searchHistory;
-    ::application::dto::DirsConfig m_dir_paths = { {} , {} } ;
+    ::application::dto::DirsConfig m_dirs_config = { {} , {} , false } ;
     std::string historyFilePath;
 };
 

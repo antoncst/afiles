@@ -46,7 +46,7 @@ private slots:
     void on_query_returnpressed( ) ; // lineedit_query->returnPressed()
     void on_query_editfinished() ;
     //void on_dirsedit_finished() ; // lineedit_dirs ->editingFinished
-    // void on_hidden_files_checked() ; // chkbx_hiddenFiles ->stateChanged
+    void on_hidden_files_checked() ; // chkbx_hiddenFiles ->stateChanged
     void on_history_go_back() ; // button_hist_left ->clicked , action alt-left
     void on_history_go_forward() ; // button_hist_right ->clicked
     // void slot_run_action() ; // run_action ->triggered
@@ -69,7 +69,7 @@ private slots:
 
     // void onScanClicked();
     // void onRemoveRootClicked();
-     void onSearchClicked();
+     void onSearchClicked(const QString &statusBarMessage = "" );
     // void onSearchTextChanged(const QString& text);
     // void onSearchHistorySelected(const QString& searchTerm);
     // void onFileContextMenuRequested(const QPoint& pos);
@@ -187,6 +187,7 @@ protected:
     void moveEvent( QMoveEvent * ) override ;
     //void timerEvent(QTimerEvent *) override ;
     bool eventFilter(QObject *target, QEvent *event) override ;
+    void closeEvent(QCloseEvent *event) override;
 
 public slots:
     void stop_scan_files() {

@@ -55,7 +55,7 @@ std::vector<entities::FileNode> FilesProc::scanFileSystem(
 
 
 void FilesProc::scanDirectoryRecursive(
-    ScanContext& context, // Принимает по ссылке
+    ScanContext & context,
     const QString & path,
     int parentIndex)
 {
@@ -70,72 +70,69 @@ void FilesProc::scanDirectoryRecursive(
     //QString path_norm = ! path.endsWith( QDir::separator() ) && ! path.endsWith( '/' )
     //                        ? path + QDir::separator() : path ;
 
+    auto file_mask = QDir::Files | QDir::NoDotAndDotDot | QDir::NoSymLinks ;
+    file_mask = context.dirs_config.show_hidden ? file_mask | QDir::Hidden : file_mask ;
+
     QDir dir( path );
     if ( !dir.exists() ) return ;
 
-    auto entries = dir.entryInfoList(
-        QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::NoSymLinks
-        //, QDir::DirsFirst // QDir::Name |
-        );
-
-    for (const auto& entry : entries)
+    for (const QString & filename : dir.entryList( file_mask ) )
     {
+
         domain::entities::FileNode node;
         node.parentIndex = parentIndex;
-        node.name = entry.fileName() ;
-        node.type = qFileInfoToFileType(entry);
+        node.name = filename ;
+        node.type = domain::entities::FileType::File ; //qFileInfoToFileType(entry);
         //node.size = static_cast<uint64_t>(entry.size());
         //node.modifiedTime = entry.lastModified().toSecsSinceEpoch();
         //node.createdTime = entry.birthTime().isValid() ?
         //                       entry.birthTime().toSecsSinceEpoch() :
         //                       entry.lastModified().toSecsSinceEpoch();
         //node.permissions = static_cast<uint32_t>(entry.permissions());
+        context.fileSystem.push_back(node);
+        ++context.totalScanned ;
+        if ( context.totalScanned % 1000 == 0 )
+            if ( stop_scan )
+                return ;
+    }
 
+    auto dir_mask = QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks ;
+    dir_mask =  context.dirs_config.show_hidden ? dir_mask | QDir::Hidden : dir_mask ;
 
+    for ( QString const & subdir : dir.entryList( dir_mask ) )
+    {
         //Решено:  Корневой path - содержит слэш в конце
         // а при рекурсии path не содержит слэш в конце, поэтому надо его добавлять в path
         QString subdirpath ;
-        if ( node.isDirectory() )
-        {
-            if ( path.endsWith( QDir::separator() ) )
-                subdirpath = path + node.name ;
-            else
-                subdirpath = path + QDir::separator() + node.name ;
+        if ( path.endsWith( QDir::separator() ) )
+            subdirpath = path + subdir ;
+        else
+            subdirpath = path + QDir::separator() + subdir ;
 
-            if ( context.shouldExclude( subdirpath ) )
-                continue ;
-        }
-            /*        //skipping dirs
-        bool bSkipDirFound = false;
-        for ( QString & skip_dir :  )
-            if ( (path_norm + subdir).contains( skip_dir ) )
-            {
-                bSkipDirFound = true ;
-                umap_undiscovered_skip_dirs_[ skip_dir ] = true ;
-                break ;
-            }
-        if ( bSkipDirFound )
+        if ( context.shouldExclude( subdirpath ) ) {
+            //umap_undiscovered_skip_dirs_[ skip_dir ] = true ; //todo
             continue ;
-        // end of skipping dirs
-*/
+        }
 
+        domain::entities::FileNode node;
+        node.parentIndex = parentIndex;
+        node.name = subdir ;
+        node.type = domain::entities::FileType::Directory ; //qFileInfoToFileType(entry);
         context.fileSystem.push_back(node);
         ++context.totalScanned ;
         // Рекурсивно сканируем поддиректории
-        if (node.isDirectory())
-        {
-            scanDirectoryRecursive(context
-                                   , subdirpath
-                                   , context.fileSystem.size() - 1 );
-        }
+        scanDirectoryRecursive(context
+                               , subdirpath
+                               , context.fileSystem.size() - 1 );
     }
 
+    //Как должно было быть в чистой архитектуре (отказались ради производительности):
     //auto children = repository->scanDirectory(path_norm, parentIndex);
-
     //for (auto& child : children) {
     //}
 }
-//C:/Programs; C:/Program Files; c:\windows; AppData; c:\qt;
+
+// C:/Program Files; c:\windows; AppData; c:\qt;
 bool FilesProc::ScanContext::shouldExclude(const QString& path) const {
     QString normalizedPath = path.toLower();
 
@@ -175,18 +172,6 @@ bool FilesProc::ScanContext::shouldExclude(const QString& path) const {
     return false;
 }
 
-
-/*
-bool FilesProc::ScanContext::shouldExclude(const QString& path) const {
-    for (const auto& exclude : dirs_config.exclude) {
-        if (path.toLower().contains(exclude) ) {   // , Qt::CaseInsensitive
-            //umap_undiscovered_skip_dirs_[ skip_dir ] = true ;
-            return true;
-        }
-    }
-    return false;
-}
-*/
 
 QString normalize_str( QString const & str )
 {

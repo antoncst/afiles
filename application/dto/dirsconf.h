@@ -14,6 +14,7 @@ namespace application::dto {
 struct DirsConfig {
     std::vector<QString> roots;
     std::vector<QString> exclude; // do not search in these dirs
+    bool show_hidden ;
 
     bool operator==(const DirsConfig& other) const {
         return roots == other.roots && exclude == other.exclude;
